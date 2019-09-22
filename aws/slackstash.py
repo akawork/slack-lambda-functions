@@ -154,6 +154,23 @@ def print_rds_instance_info(_instance):
     return attachment
 
 
+def print_schedule_list_info(list_rules):
+    """
+    Format attachment for schedule info
+    """
+    text = ""
+    array_schedules = list_rules["Rules"]
+    if len(array_schedules) > 0:
+        text = "List of schedule as below:\n"
+        for schedule in array_schedules:
+            text = "{0} - *Schedule:* `{1}`     *State:* `{2}`\n".format(
+                text, schedule["Name"], schedule["State"])
+    else:
+        text = "There are no schedules!"
+
+    return text
+
+
 def convert_datetime_to_cron(date_time):
     """
     Convert date time to cron expression
@@ -280,17 +297,46 @@ class Command(object):
         return text
 
     @classmethod
-    def aws_schedule(cls, schedule):
+    def aws_set_schedule(cls, schedule):
         """
         aws schedule command using for set schedule turn-on and turn-off instance
         """
         timestamp = datetime.utcnow().strftime('%Y-%m-%d_%H-%M-%S')
-        if schedule["turnon"] is not None:
-            cron_express = convert_datetime_to_cron(schedule["turnon"])
-            cw_events.create_event(schedule["requester"] + "_turnon_" + timestamp,
-                                   cron_express, constants.LAMBDA_TURNON)
-        if schedule["turnoff"] is not None:
-            cron_express = convert_datetime_to_cron(schedule["turnoff"])
-            cw_events.create_event(schedule["requester"] + "_turnoff_" + timestamp,
-                                   cron_express, constants.LAMBDA_TURNOFF)
-        return schedule
+        response_text = "Set schedule successfully:\n"
+        for command in schedule["commands"]:
+            if command["cmd_text"] == "turnon" or command["cmd_text"] == "turnoff":
+                cron_express = convert_datetime_to_cron(command["time"])
+                rule_name = '{0}_{1}_{2}_{3}'.format(
+                    schedule["requester"], command["cmd_text"], command["instance_tag"], timestamp)
+                rule_description = '{0} `{1}` at {2}'.format(command["cmd_text"],
+                                                                       command["instance_tag"], command["time"]).capitalize()
+                # Create rule
+                cmd_text = '{0}+{1}'.format(command["cmd_text"], command["instance_tag"])
+                target_input = '{"body":"' + constants.AUTO_TRIGGER_EVENT_BODY.format(
+                    schedule["requester"], rule_name, False, command["cmd"], cmd_text) + '"}'
+                cw_events.create_rule(rule_name, rule_description,
+                                      cron_express, constants.LAMBDA_FUNCTION_NAME, target_input)
+                response_text = '{0}*- Rule `{1}`:*\n      {2}\n'.format(response_text, rule_name, rule_description)
+        return response_text
+
+    @classmethod
+    def aws_delete_schedule(cls, rule_name):
+        """
+        aws delete a schedule by rule name
+        """
+        rules = cw_events.list_rules()["Rules"]
+        for rule in rules:
+            if rule["Name"] == rule_name:
+                cw_events.delete_rule(rule_name)
+                return "Deleted schedule `{0}`".format(rule_name)
+
+        return "Rule `{0}` not exists!".format(rule_name)
+
+    @classmethod
+    def aws_list_schedule(cls, schedule):
+        """
+        aws list all rules
+        """
+        list_rules = cw_events.list_rules()
+        attachment = print_schedule_list_info(list_rules)
+        return attachment
