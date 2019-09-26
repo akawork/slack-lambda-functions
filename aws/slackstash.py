@@ -175,11 +175,18 @@ def convert_datetime_to_cron(date_time):
     """
     Convert date time to cron expression
     """
-    date_time = datetime.strptime(date_time, '%d/%m/%Y %H:%M')
-
+    # Not handle timezone logic. Default timezone of ICT+7
+    offset = constants.LOCAL_TIMEZONE
+    parse_time = None
+    try:
+        parse_time = datetime.strptime(date_time, "%Y/%m/%d %H:%M")
+    except ValueError:
+        # date time not match format
+        return None
+    parse_time = datetime.fromtimestamp(datetime.timestamp(parse_time) - offset*60*60)
     cron_express = "cron({0} {1} {2} {3} ? {4})".format(
-        date_time.minute, date_time.hour, date_time.day, date_time.month,
-        date_time.year)
+        parse_time.minute, parse_time.hour, parse_time.day, parse_time.month,
+        parse_time.year)
     return cron_express
 
 
@@ -207,7 +214,7 @@ class Command(object):
         instances = get_instance_id(_instance, list_instance, False)
         number_instance = len(instances)
         if number_instance == 0:
-            return "Instance not found!"
+            return constants.MESSAGE_INSTANCE_NOT_FOUND
         elif number_instance == 1:
             _instance = instances[0]
             if _instance["ServiceType"] == "ec2":
@@ -233,7 +240,7 @@ class Command(object):
         instances = get_instance_id(_instance, list_instance, False)
         number_instance = len(instances)
         if number_instance == 0:
-            return "Instance not found!"
+            return constants.MESSAGE_INSTANCE_NOT_FOUND
         if number_instance == 1:
             _instance = instances[0]
             if _instance["ServiceType"] == "ec2":
@@ -266,7 +273,7 @@ class Command(object):
                 elif _instance["ServiceType"] == "rds":
                     attachment = print_rds_instance_info(_instance)
         else:
-            attachment["text"] = "Instance not found!"
+            attachment["text"] = constants.MESSAGE_INSTANCE_NOT_FOUND
             return attachment
         return attachment
 
@@ -293,7 +300,7 @@ class Command(object):
                     text = "{0}  - *Tags:* `{1}`     *Service:* `rds`\n".format(
                         text, _instance["TagName"])
         else:
-            return "Instance not found!"
+            return constants.MESSAGE_INSTANCE_NOT_FOUND
         return text
 
     @classmethod
@@ -301,22 +308,30 @@ class Command(object):
         """
         aws schedule command using for set schedule turn-on and turn-off instance
         """
+        # Check instance
         timestamp = datetime.utcnow().strftime('%Y-%m-%d_%H-%M-%S')
         response_text = "Set schedule successfully:\n"
         for command in schedule["commands"]:
             if command["cmd_text"] == "turnon" or command["cmd_text"] == "turnoff":
                 cron_express = convert_datetime_to_cron(command["time"])
+                # Check if input date_time is match format
+                if cron_express is None:
+                    return 'The input time parameter is incorrect! The format should be same as `2016/4/15-08:27`'
+                # Check if input instance exist
+                if Command.aws_status(command["instance_tag"])["text"] == constants.MESSAGE_INSTANCE_NOT_FOUND:
+                    return constants.MESSAGE_INSTANCE_NOT_FOUND
                 rule_name = '{0}_{1}_{2}_{3}'.format(
                     schedule["requester"], command["cmd_text"], command["instance_tag"], timestamp)
                 rule_description = '{0} `{1}` at {2}'.format(command["cmd_text"],
-                                                                       command["instance_tag"], command["time"]).capitalize()
+                                                             command["instance_tag"], command["time"]).capitalize()
                 # Create rule
                 cmd_text = '{0}+{1}'.format(command["cmd_text"], command["instance_tag"])
                 target_input = '{"body":"' + constants.AUTO_TRIGGER_EVENT_BODY.format(
                     schedule["requester"], rule_name, False, command["cmd"], cmd_text) + '"}'
                 cw_events.create_rule(rule_name, rule_description,
                                       cron_express, constants.LAMBDA_FUNCTION_NAME, target_input)
-                response_text = '{0}*- Rule `{1}`:*\n      {2}\n'.format(response_text, rule_name, rule_description)
+                response_text = '{0}*- Rule `{1}`:*\n      {2}\n'.format(
+                    response_text, rule_name, rule_description)
         return response_text
 
     @classmethod

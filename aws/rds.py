@@ -55,7 +55,7 @@ def start_all_instances(instances):
                     text, instance["TagName"])
 
         return text
-    return "Instance not found!"
+    return constants.MESSAGE_INSTANCE_NOT_FOUND
 
 
 def stop_all_instances(instances):
@@ -76,7 +76,7 @@ def stop_all_instances(instances):
                     text, str(instance["TagName"]))
 
         return text
-    return "Instance not found!"
+    return constants.MESSAGE_INSTANCE_NOT_FOUND
 
 
 def start_instance(instance):

@@ -65,7 +65,7 @@ def start_all_instance(instances):
             CLIENT.start_instances(InstanceIds=instance_ids)
 
         return text
-    return "Instance not found!"
+    return constants.MESSAGE_INSTANCE_NOT_FOUND
 
 
 def stop_all_instance(instances):
@@ -88,7 +88,7 @@ def stop_all_instance(instances):
             CLIENT.stop_instances(InstanceIds=instance_ids)
 
         return text
-    return "Instance not found!"
+    return constants.MESSAGE_INSTANCE_NOT_FOUND
 
 
 def start_instance(instance):
