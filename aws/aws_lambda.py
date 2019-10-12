@@ -17,3 +17,14 @@ def find_function(function_name):
         if funct["FunctionName"] == function_name:
             return funct
     return "Lambda Function not found!"
+
+
+def add_invoke_function_permission(statement_id, function_name):
+    # Make source_arn as statement id
+    LAMBDA.add_permission(StatementId=statement_id, FunctionName=function_name, Principal='events.amazonaws.com',
+                          Action='lambda:InvokeFunction')
+
+
+def remove_permission(statement_id, function_name):
+    # Remove permission with statement_id
+    LAMBDA.remove_permission(FunctionName=function_name, StatementId=statement_id)

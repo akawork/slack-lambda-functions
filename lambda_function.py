@@ -8,38 +8,37 @@ from aws import slackstash
 from aws import constants
 
 
-def process_schedule_option(options):
+def process_schedule_set_option(options):
     """
     Process schedule options
     """
-    schedule = {
-        "turnon": None,
-        "turnoff": None,
-        "instance_tag": None,
-        "requester": None
-    }
-    if options[1] == "schedule":
-        options_size = len(options)
-        if 3 < options_size < 8:
-            i = 2
-            while i < options_size:
-                if options[i] == "turnon":
-                    i = i + 1
-                    schedule["turnon"] = urllib.parse.unquote(
-                        options[i]).replace("-", " ")
-                elif options[i] == "turnoff":
-                    i = i + 1
-                    schedule["turnoff"] = urllib.parse.unquote(
-                        options[i]).replace("-", " ")
-                else:
+    options_size = len(options)
+    # Support only schedule for turnon/turnoff
+    if 3 < options_size < 8:
+        schedule = {
+            "commands": [],
+            "requester": None
+        }
+        i = 2
+        while i < options_size - 1:
+            if options[i] == "turnon" or options[i] == "turnoff":
+                cmd = {
+                    "cmd": "aws",
+                    "cmd_text": options[i],
+                    "instance_tag": options[options_size - 1],
+                    "time": urllib.parse.unquote(options[i+1]).replace("-", " "),
+                    "is_loop": False
+                }
+                date_time = cmd["time"]
+                if date_time is None:
                     return constants.MESSAGE_WRONG_COMMAND
+                schedule["commands"].append(cmd)
                 i = i + 2
-            schedule["instance_tag"] = options[options_size - 1]
-        else:
-            return constants.MESSAGE_WRONG_COMMAND
+            else:
+                return constants.MESSAGE_WRONG_COMMAND
+        return schedule
     else:
         return constants.MESSAGE_WRONG_COMMAND
-    return schedule
 
 
 def process_event(event):
@@ -70,6 +69,14 @@ def process_event(event):
             data["user_name"])
     attach = ""
     cmd = slackstash.Command()
+    # Delete schedule if event is auto triggered and schedule is executed once
+    try:
+        if data["auto_trigger_event"] == "True" and data["is_loop"] == "False":
+            cmd.call("aws_delete_schedule", data["rule_name"])
+    except KeyError:
+        print ("Not auto trigger event!")
+        pass
+
     if options[0] == "turnon":
         att_text = cmd.call(command + "_turnon", options[1])
     elif options[0] == "turnoff":
@@ -78,14 +85,18 @@ def process_event(event):
         attach = cmd.call(command + "_status", options[1])
     elif options[0] == "tags":
         att_text = cmd.call(command + "_tags", options[1])
-    elif options[0] == "set":
-        schedule = process_schedule_option(options)
+    elif options[0] == "schedule" and options[1] == "set":
+        schedule = process_schedule_set_option(options)
         if schedule == constants.MESSAGE_WRONG_COMMAND:
-            response["text"] = schedule
-            return response
-
-        schedule["requester"] = data["user_name"]
-        att_text = cmd.call(command + "_schedule", schedule)
+            att_text = "Command `{0} {1}` wrong".format(
+                command, data["text"].replace("+", " "))
+        else:
+            schedule["requester"] = data["user_name"]
+            att_text = cmd.call(command + "_set_schedule", schedule)
+    elif options[0] == "schedule" and options[1] == "delete":
+        att_text = cmd.call(command + "_delete_schedule", options[2])
+    elif options[0] == "schedule" and options[1] == "list-all":
+        att_text = cmd.call(command + "_list_schedule", None)
     else:
         att_text = "Command `{0} {1}` wrong".format(
             command, data["text"].replace("+", " "))
