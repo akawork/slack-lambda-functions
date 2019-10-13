@@ -6,6 +6,8 @@ import json
 import urllib.parse
 from aws import slackstash
 from aws import constants
+import botocore.vendored.requests as requests
+import os
 
 
 def process_schedule_set_option(options):
@@ -41,9 +43,58 @@ def process_schedule_set_option(options):
         return constants.MESSAGE_WRONG_COMMAND
 
 
-def process_event(event):
+def process_approval_request(payload):
     """
-    Process incoming event
+    Process event when user click 'approve' or 'reject'
+    """
+    actions = payload["actions"]
+    original_request_message = payload["original_message"]["text"].replace('+', ' ')
+    response_text = ""
+    value = actions[0]["value"].replace('+', ' ').replace("'", "\"")
+    action_value = json.loads(value)
+    data = {
+        "token" : payload["token"],
+        "team_id": payload["team"]["id"],
+        "channel_id": payload["channel"]["id"],
+        "user_id": action_value["user_id"],
+        "user_name": action_value["user_name"],
+        "command": action_value["command"],
+        "text": action_value["text"],
+        "response_url": action_value["response_url"],
+        "attachments": [],
+        "approval_user_id": payload["user"]["id"],
+        "approval_action": None
+    }
+
+    if actions[0]["name"] == "approve":
+        response_text = "<@{0}> approved this request".format(payload["user"]["name"])
+        process_command_response = process_slash_command_request(data)
+        data["approval_action"] = "approved"
+        data["attachments"] = process_command_response["attachments"]
+    elif actions[0]["name"] == "reject":
+        response_text = "<@{0}> rejected this request".format(payload["user"]["name"])
+        data["approval_action"] = "rejected"
+
+    # This send response to original request channel
+    send_result_message_after_approval(data)
+
+    # This response to approval channel
+    return {
+        "replace_original": "true",
+        "text": original_request_message,
+        "attachments": [
+            {
+                "text": response_text,
+                "color": "#3AA3E3",
+                "attachment_type": "default",
+            }
+        ]
+    }
+
+
+def process_slash_command_request(data):
+    """
+    Process slash command
     """
     text = ""
     att_text = ""
@@ -53,10 +104,8 @@ def process_event(event):
         "text": None,
         "attachments": []
     }
-    body = event.get('body').replace("&", "\",\"").replace("=", "\":\"")
-    data = json.loads("{\"" + body + "\"}")
 
-    command = data["command"].strip("%2F")
+    command = data["command"].strip("/")
 
     data["text"] = " ".join(data["text"].replace("+", " ").split())
     options = data["text"].split(" ")
@@ -78,9 +127,19 @@ def process_event(event):
         pass
 
     if options[0] == "turnon":
-        att_text = cmd.call(command + "_turnon", options[1])
+        if slackstash.check_need_approval(data):
+            send_approval_message("User <@{0}> request to `turnon {1}`".format(
+                data["user_name"], options[1]), data)
+            att_text = "Your request need approval. Please wait!"
+        else:
+            att_text = cmd.call(command + "_turnon", options[1])
     elif options[0] == "turnoff":
-        att_text = cmd.call(command + "_turnoff", options[1])
+        if slackstash.check_need_approval(data):
+            send_approval_message("User <@{0}> request to `turnoff {1}`".format(
+                data["user_name"], options[1]), data)
+            att_text = "Your request need approval. Please wait!"
+        else:
+            att_text = cmd.call(command + "_turnoff", options[1])
     elif options[0] == "status":
         attach = cmd.call(command + "_status", options[1])
     elif options[0] == "tags":
@@ -107,6 +166,86 @@ def process_event(event):
     response["attachments"].append(att_text)
     response["attachments"].append(attach)
     return response
+
+
+def process_event(event):
+    """
+    Process incoming event
+    """
+    body = event.get('body').replace("=", "\":\"").replace("&", "\",\"")
+    body = "{\"" + body + "\"}"
+    unquote_body = urllib.parse.unquote(body)
+    unquote_body = unquote_body.replace(':"{"', ':{"').replace('"}"', '"}')
+    data = json.loads(unquote_body)
+    # Check if this is a approval request
+    if 'payload' in data:
+        payload = data["payload"]
+        if payload["type"] == "interactive_message":
+            return process_approval_request(payload)
+    else:
+        # This request is not a approval request
+        return process_slash_command_request(data)
+
+
+def send_approval_message(approval_message, data):
+    """
+    Send a message to approval channel, request to approve command
+    """
+    uri = constants.SLACK_APPROVAL_ROOM_WEEBHOOK
+    headers = {
+        'content-type': 'application/json'
+    }
+    value_object = {
+        "command": data["command"],
+        "text": data["text"],
+        "user_id": data["user_id"],
+        "user_name": data["user_name"],
+        "response_url": data["response_url"],
+        "attachments": []
+    }
+    data = {
+        "response_type": "in_channel",
+        "text": approval_message,
+        "attachments": [
+            {
+                "text": "Would you approve this request?",
+                "fallback": "Would you approve this request?",
+                "callback_id": "confirm_request",
+                "color": "#3AA3E3",
+                "attachment_type": "default",
+                "actions": [
+                    {
+                        "name": "approve",
+                        "text": "Approve",
+                        "type": "button",
+                        "style": "primary",
+                        "value": str(value_object)
+                    },
+                    {
+                        "name": "reject",
+                        "text": "Reject",
+                        "type": "button",
+                        "style": "danger",
+                        "value": str(value_object)
+                    }
+                ]
+            }
+        ]
+    }
+    requests.post(uri, data=json.dumps(data), headers=headers)
+
+
+def send_result_message_after_approval(data):
+    uri = data["response_url"]
+    headers = {
+        'content-type': 'application/json'
+    }
+    data = {
+        "response_type": "in_channel",
+        "text": '<@{0}> {1} request: `{2}` of user <@{3}>'.format(data["approval_user_id"], data["approval_action"], data["text"], data["user_id"]),
+        "attachments": data["attachments"]
+    }
+    requests.post(uri, data=json.dumps(data), headers=headers)
 
 
 def lambda_handler(event, context):
