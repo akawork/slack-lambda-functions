@@ -19,13 +19,13 @@ Build an Slack bot can use for manage Instances or Service on AWS
 
 ## Features
 ### 1. Slash command
-  - [ ] **Basic Actions with an Instance**
+  - [x] **Basic Actions with an Instance**
      - [x] Turn-on
      - [x] Turn-off
      - [x] Get status
      - [x] Get all tag of RDS and EC2 instances
-     - [ ] Set schedule for turn-on and turn-off instance
-     - [ ] Approval for turn-on and turn-off instance
+     - [x] Set schedule for turn-on and turn-off instance
+     - [x] Approval for turn-on and turn-off instance
 
   - [ ] **Actions with a System have same name convention**
      - [ ] Turn-on

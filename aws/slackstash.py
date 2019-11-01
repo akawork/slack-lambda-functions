@@ -48,6 +48,13 @@ def check_authorization(data):
         return True
     return False
 
+def check_need_approval(data):
+    """
+    Check if request need approval or not (depend on user_id and channel_id)
+    """
+    if data["channel_id"] == constants.SLACK_APPROVAL_CHANNEL_ID:
+        return False
+    return True
 
 def get_instance_id(instance, instance_list, regex):
     """
