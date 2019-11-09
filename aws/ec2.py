@@ -59,8 +59,8 @@ def start_all_instance(instances):
                 text = text + 'The instance `' + str(
                     instance["TagName"]) + '` starting!\n'
             else:
-                text = text + 'The instance `' + str(
-                    instance["TagName"]) + '` already started!\n'
+                text = "{0}Can not `turn-on` instance `{1}` because of Instance in `{2}`!\n".format(
+                    text, str(instance["TagName"]), str(instance["State"]))
 
         if instance_ids:
             CLIENT.start_instances(InstanceIds=instance_ids)
@@ -76,14 +76,15 @@ def stop_all_instance(instances):
     if instances:
         instance_ids = []
         text = ""
+
         for instance in instances:
             if instance["State"] == "running":
                 instance_ids.append(instance["InstanceId"])
                 text = text + 'The instance `' + str(
                     instance["TagName"]) + '` stopping!\n'
             else:
-                text = text + 'The instance `' + str(
-                    instance["TagName"]) + '` already stopped!\n'
+                text = "{0}Can not `turn-off` instance `{1}` because of Instance in `{2}`!\n".format(
+                    text, str(instance["TagName"]), str(instance["State"]))
 
         if instance_ids:
             CLIENT.stop_instances(InstanceIds=instance_ids)
@@ -104,8 +105,8 @@ def start_instance(instance):
         text = text + 'The instance `' + str(
             instance["TagName"]) + '` starting!\n'
     else:
-        text = text + 'The instance `' + str(
-            instance["TagName"]) + '` already started!\n'
+        text = "{0}Can not `turn-on` instance `{1}` because of Instance in `{2}`!\n".format(
+            text, str(instance["TagName"]), str(instance["State"]))
 
     return text
 
@@ -122,7 +123,7 @@ def stop_instance(instance):
         text = text + 'The instance `' + str(
             instance["TagName"]) + '` stopping!\n'
     else:
-        text = text + 'The instance `' + str(
-            instance["TagName"]) + '` already stopped!\n'
+        text = "{0}Can not `turn-off` instance `{1}` because of Instance in `{2}`!\n".format(
+            text, str(instance["TagName"]), str(instance["State"]))
 
     return text

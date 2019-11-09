@@ -48,6 +48,7 @@ def check_authorization(data):
         return True
     return False
 
+
 def check_need_approval(data):
     """
     Check if request need approval or not (depend on user_id and channel_id)
@@ -56,19 +57,22 @@ def check_need_approval(data):
         return False
     return True
 
-def get_instance_id(instance, instance_list, regex):
+
+def get_instance_id(_instances, instance_list, regex):
     """
     Get all install match with tag name
     """
     instances = []
     if regex:
         for item in instance_list:
-            if instance in item["TagName"].lower():
+            if _instances[0] in item["TagName"].lower():
                 instances.append(item)
     else:
-        for item in instance_list:
-            if instance == item["TagName"].lower():
-                instances.append(item)
+        for instance in _instances:
+            for item in instance_list:
+                if instance == item["TagName"].lower():
+                    instances.append(item)
+
     return instances
 
 
@@ -202,23 +206,24 @@ class Command(object):
     All command list here
     """
 
-    def call(self, command, option):
+    def call(self, command, options):
         """
         Call functions
         """
         method_name = command
         method = getattr(self, method_name, lambda: 'Invalid command!')
-        return method(option)
+
+        return method(options)
 
     @classmethod
-    def aws_turnon(cls, _instance):
+    def aws_turnon(cls, _instances):
         """
         Turn on command
         """
         ec2_instances = ec2.get_list_instances()
         rds_instances = rds.get_list_instances()
         list_instance = ec2_instances + rds_instances
-        instances = get_instance_id(_instance, list_instance, False)
+        instances = get_instance_id(_instances, list_instance, False)
         number_instance = len(instances)
         if number_instance == 0:
             return constants.MESSAGE_INSTANCE_NOT_FOUND
@@ -229,22 +234,33 @@ class Command(object):
             elif _instance["ServiceType"] == "rds":
                 value = rds.start_instance(_instance)
         else:
+            ec2_instances = []
+            rds_instances = []
             for _instance in instances:
                 if _instance["ServiceType"] == "ec2":
-                    value = ec2.start_all_instance(instances)
+                    ec2_instances.append(_instance)
                 elif _instance["ServiceType"] == "rds":
-                    value = rds.start_all_instances(instances)
+                    rds_instances.append(_instance)
+
+            value = ""
+            if len(ec2_instances) > 0:
+                result = ec2.start_all_instance(ec2_instances)
+                value = "{0}{1}\n".format(value, result)
+            if len(rds_instances) > 0:
+                result = rds.start_all_instance(rds_instances)
+                value = "{0}{1}\n".format(value, result)
+
         return value
 
     @classmethod
-    def aws_turnoff(cls, _instance):
+    def aws_turnoff(cls, _instances):
         """
         Turnoff command
         """
         ec2_instances = ec2.get_list_instances()
         rds_instances = rds.get_list_instances()
         list_instance = ec2_instances + rds_instances
-        instances = get_instance_id(_instance, list_instance, False)
+        instances = get_instance_id(_instances, list_instance, False)
         number_instance = len(instances)
         if number_instance == 0:
             return constants.MESSAGE_INSTANCE_NOT_FOUND
@@ -255,16 +271,26 @@ class Command(object):
             elif _instance["ServiceType"] == "rds":
                 value = rds.stop_instance(_instance)
         else:
+            ec2_instances = []
+            rds_instances = []
             for _instance in instances:
                 if _instance["ServiceType"] == "ec2":
-                    value = ec2.stop_all_instance(_instance)
+                    ec2_instances.append(_instance)
                 elif _instance["ServiceType"] == "rds":
-                    value = rds.stop_all_instances(_instance)
+                    rds_instances.append(_instance)
+
+            value = ""
+            if len(ec2_instances) > 0:
+                result = ec2.stop_all_instance(ec2_instances)
+                value = "{0}{1}\n".format(value, result)
+            if len(rds_instances) > 0:
+                result = rds.stop_all_instance(rds_instances)
+                value = "{0}{1}\n".format(value, result)
 
         return value
 
     @classmethod
-    def aws_status(cls, _instance):
+    def aws_status(cls, _instances):
         """
         aws status command using for get status of instances
         """
@@ -272,7 +298,7 @@ class Command(object):
         ec2_instances = ec2.get_list_instances()
         rds_instances = rds.get_list_instances()
         list_instance = ec2_instances + rds_instances
-        instances = get_instance_id(_instance, list_instance, False)
+        instances = get_instance_id(_instances, list_instance, False)
         if instances:
             for _instance in instances:
                 if _instance["ServiceType"] == "ec2":
@@ -282,6 +308,7 @@ class Command(object):
         else:
             attachment["text"] = constants.MESSAGE_INSTANCE_NOT_FOUND
             return attachment
+
         return attachment
 
     @classmethod
@@ -308,6 +335,7 @@ class Command(object):
                         text, _instance["TagName"])
         else:
             return constants.MESSAGE_INSTANCE_NOT_FOUND
+
         return text
 
     @classmethod
@@ -323,14 +351,15 @@ class Command(object):
                 cron_express = convert_datetime_to_cron(command["time"])
                 # Check if input date_time is match format
                 if cron_express is None:
-                    return 'The input time parameter is incorrect! The format should be same as `2016/4/15-08:27`'
+                    return constants.MESSAGE_DATE_TIME_INCORRECT
                 # Check if input instance exist
-                if Command.aws_status(command["instance_tag"])["text"] == constants.MESSAGE_INSTANCE_NOT_FOUND:
+                message = Command.aws_status(command["instance_tag"])["text"]
+                if message == constants.MESSAGE_INSTANCE_NOT_FOUND:
                     return constants.MESSAGE_INSTANCE_NOT_FOUND
                 rule_name = '{0}_{1}_{2}_{3}'.format(
                     schedule["requester"], command["cmd_text"], command["instance_tag"], timestamp)
-                rule_description = '{0} `{1}` at {2}'.format(command["cmd_text"],
-                                                             command["instance_tag"], command["time"]).capitalize()
+                rule_description = '{0} `{1}` at {2}'.format(
+                    command["cmd_text"], command["instance_tag"], command["time"]).capitalize()
                 # Create rule
                 cmd_text = '{0}+{1}'.format(command["cmd_text"], command["instance_tag"])
                 target_input = '{"body":"' + constants.AUTO_TRIGGER_EVENT_BODY.format(
@@ -339,6 +368,7 @@ class Command(object):
                                       cron_express, constants.LAMBDA_FUNCTION_NAME, target_input)
                 response_text = '{0}*- Rule `{1}`:*\n      {2}\n'.format(
                     response_text, rule_name, rule_description)
+
         return response_text
 
     @classmethod
@@ -361,4 +391,5 @@ class Command(object):
         """
         list_rules = cw_events.list_rules()
         attachment = print_schedule_list_info(list_rules)
+
         return attachment
