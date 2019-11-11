@@ -128,7 +128,6 @@ def process_slash_command_request(data):
     else:
         text = "User <@{0}> are not have authorization access to this function!".format(
             data["user_name"])
-    attach = ""
 
     if verify_command(options):
         action = options[0]
@@ -159,9 +158,11 @@ def process_slash_command_request(data):
         else:
             att_text = cmd.call(command + "_turnoff", value)
     elif action == "status":
-        attach = cmd.call(command + "_status", value)
+        response["attachments"] = cmd.call(command + "_status", value)
+        return response
     elif action == "tags":
-        att_text = cmd.call(command + "_tags", value)
+        response["attachments"] = cmd.call(command + "_tags", value)
+        return response
     elif action == "schedule" and value[0] == "set":
         schedule = process_schedule_set_option(options)
         if schedule == constants.MESSAGE_WRONG_COMMAND:
@@ -182,7 +183,7 @@ def process_slash_command_request(data):
 
     response["text"] = text
     response["attachments"].append(att_text)
-    response["attachments"].append(attach)
+
     return response
 
 

@@ -30,8 +30,8 @@ Build an Slack bot can use for manage Instances or Service on AWS
   - [ ] **Actions with a System have same name convention**
      - [x] Turn-on
      - [x] Turn-off
-     - [ ] Get status
-     - [ ] Approval for turn-on and turn-off system
+     - [x] Get status
+     - [x] Approval for turn-on and turn-off system
      - [ ] Set schedule for turn-on and turn-off system
      - [ ] Receive alert when abnormal action
 
