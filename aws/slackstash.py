@@ -76,7 +76,7 @@ def get_instance_id(_instances, instance_list, regex):
     return instances
 
 
-def print_ec2_instance_info(_instance):
+def print_instance_info(_instance):
     """
     Format attachment for EC2 instance
     """
@@ -98,69 +98,66 @@ def print_ec2_instance_info(_instance):
         "value": _instance["InstanceType"],
         "short": "true"
     }
-    field_local_ip = {
-        "title": "Local IP:",
-        "value": _instance["PrivateIpAddresses"],
-        "short": "true"
-    }
+
     attachment["fields"].append(field_service_type)
     attachment["fields"].append(field_instance_type)
     attachment["fields"].append(field_status)
-    attachment["fields"].append(field_local_ip)
-    if _instance["PublicIpAddress"] is not None:
-        field_public_ip = {
-            "title": "Public IP:",
-            "value": _instance["PublicIpAddress"],
+
+    if _instance["ServiceType"] == "ec2":
+        field_local_ip = {
+            "title": "Local IP:",
+            "value": _instance["PrivateIpAddresses"],
             "short": "true"
         }
-        attachment["fields"].append(field_public_ip)
+        attachment["fields"].append(field_local_ip)
+        if _instance["PublicIpAddress"] is not None:
+            field_public_ip = {
+                "title": "Public IP:",
+                "value": _instance["PublicIpAddress"],
+                "short": "true"
+            }
+            attachment["fields"].append(field_public_ip)
+    elif _instance["ServiceType"] == "rds":
+        field_endpoint = {
+            "title": "Endpoint:",
+            "value": _instance["Endpoint"],
+            "short": "true"
+        }
+        field_engine = {
+            "title": "Engine:",
+            "value": _instance["Engine"],
+            "short": "true"
+        }
+        field_engine_version = {
+            "title": "Engine Version:",
+            "value": _instance["EngineVersion"],
+            "short": "true"
+        }
+        attachment["fields"].append(field_endpoint)
+        attachment["fields"].append(field_engine)
+        attachment["fields"].append(field_engine_version)
 
     return attachment
 
 
-def print_rds_instance_info(_instance):
+def print_instance_tag(_instance):
     """
-    Format attachment for RDS instance
+    Format attachment for tag information
     """
-    attachment = {"text": "", "fields": [], "color": "#F35A00"}
-    attachment["text"] = "The instance `" + _instance[
-        "TagName"] + "` has current status as below:"
+    attachment = {"text": "", "fields": [], "color": "#119367"}
     field_service_type = {
         "title": "Service Type:",
         "value": _instance["ServiceType"].upper(),
         "short": "true"
     }
-    field_status = {
-        "title": "Status:",
-        "value": _instance["State"],
+    field_tag = {
+        "title": "Tag Name:",
+        "value": _instance["TagName"],
         "short": "true"
     }
-    field_instance_type = {
-        "title": "Instance Type:",
-        "value": _instance["InstanceType"],
-        "short": "true"
-    }
-    field_endpoint = {
-        "title": "Endpoint:",
-        "value": _instance["Endpoint"],
-        "short": "true"
-    }
-    field_engine = {
-        "title": "Engine:",
-        "value": _instance["Engine"],
-        "short": "true"
-    }
-    field_engine_version = {
-        "title": "Engine Version:",
-        "value": _instance["EngineVersion"],
-        "short": "true"
-    }
+
+    attachment["fields"].append(field_tag)
     attachment["fields"].append(field_service_type)
-    attachment["fields"].append(field_instance_type)
-    attachment["fields"].append(field_status)
-    attachment["fields"].append(field_endpoint)
-    attachment["fields"].append(field_engine)
-    attachment["fields"].append(field_engine_version)
 
     return attachment
 
@@ -294,29 +291,30 @@ class Command(object):
         """
         aws status command using for get status of instances
         """
-        attachment = {}
+        attachments = []
         ec2_instances = ec2.get_list_instances()
         rds_instances = rds.get_list_instances()
         list_instance = ec2_instances + rds_instances
         instances = get_instance_id(_instances, list_instance, False)
         if instances:
             for _instance in instances:
-                if _instance["ServiceType"] == "ec2":
-                    attachment = print_ec2_instance_info(_instance)
-                elif _instance["ServiceType"] == "rds":
-                    attachment = print_rds_instance_info(_instance)
+                attachments.append(print_instance_info(_instance))
         else:
-            attachment["text"] = constants.MESSAGE_INSTANCE_NOT_FOUND
-            return attachment
+            for _instance in _instances:
+                attachments.append({
+                    "text": "Instance `{0}` is not exist!".format(_instance),
+                    "color": "#119300"
+                })
+            return attachments
 
-        return attachment
+        return attachments
 
     @classmethod
     def aws_tags(cls, _instance):
         """
         aws tag command using for get all instance tags
         """
-        text = "The tags of instances as below:\n"
+        attachments = []
         ec2_instances = ec2.get_list_instances()
         rds_instances = rds.get_list_instances()
         list_instance = ec2_instances + rds_instances
@@ -327,16 +325,15 @@ class Command(object):
 
         if instances:
             for _instance in instances:
-                if _instance["ServiceType"] == "ec2":
-                    text = "{0}  - *Tags:* `{1}`     *Service:* `ec2`\n".format(
-                        text, _instance["TagName"])
-                elif _instance["ServiceType"] == "rds":
-                    text = "{0}  - *Tags:* `{1}`     *Service:* `rds`\n".format(
-                        text, _instance["TagName"])
+                attachments.append(print_instance_tag(_instance))
         else:
-            return constants.MESSAGE_INSTANCE_NOT_FOUND
+            attachments.append({
+                "text": constants.MESSAGE_INSTANCE_NOT_FOUND,
+                "color": "#119300"
+            })
+            return attachments
 
-        return text
+        return attachments
 
     @classmethod
     def aws_set_schedule(cls, schedule):
