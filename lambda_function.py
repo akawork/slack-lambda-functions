@@ -7,7 +7,18 @@ import urllib.parse
 from aws import slackstash
 from aws import constants
 import botocore.vendored.requests as requests
-import os
+
+
+def verify_command(options):
+    """
+    Verify command
+    """
+    options_size = len(options)
+
+    if options_size >= 2:
+        return True
+
+    return False
 
 
 def process_schedule_set_option(options):
@@ -53,7 +64,7 @@ def process_approval_request(payload):
     value = actions[0]["value"].replace('+', ' ').replace("'", "\"")
     action_value = json.loads(value)
     data = {
-        "token" : payload["token"],
+        "token": payload["token"],
         "team_id": payload["team"]["id"],
         "channel_id": payload["channel"]["id"],
         "user_id": action_value["user_id"],
@@ -109,42 +120,49 @@ def process_slash_command_request(data):
 
     data["text"] = " ".join(data["text"].replace("+", " ").split())
     options = data["text"].split(" ")
+    command_text = urllib.parse.unquote(data["text"])
 
     if slackstash.check_authorization(data):
         text = "User <@{0}> has run `{1} {2}` command".format(
-            data["user_name"], command, urllib.parse.unquote(data["text"]))
+            data["user_name"], command, command_text)
     else:
         text = "User <@{0}> are not have authorization access to this function!".format(
             data["user_name"])
     attach = ""
+
+    if verify_command(options):
+        action = options[0]
+        options.pop(0)
+        value = options
+
     cmd = slackstash.Command()
     # Delete schedule if event is auto triggered and schedule is executed once
     try:
         if data["auto_trigger_event"] == "True" and data["is_loop"] == "False":
             cmd.call("aws_delete_schedule", data["rule_name"])
     except KeyError:
-        print ("Not auto trigger event!")
+        print("Not auto trigger event!")
         pass
 
-    if options[0] == "turnon":
+    if action == "turnon":
         if slackstash.check_need_approval(data):
-            send_approval_message("User <@{0}> request to `turnon {1}`".format(
-                data["user_name"], options[1]), data)
-            att_text = "Your request need approval. Please wait!"
+            send_approval_message("User <@{0}> request to `{1}`".format(
+                data["user_name"], command_text), data)
+            att_text = constants.MESSAGE_APPROVAL_USER
         else:
-            att_text = cmd.call(command + "_turnon", options[1])
-    elif options[0] == "turnoff":
+            att_text = cmd.call(command + "_turnon", value)
+    elif action == "turnoff":
         if slackstash.check_need_approval(data):
-            send_approval_message("User <@{0}> request to `turnoff {1}`".format(
-                data["user_name"], options[1]), data)
-            att_text = "Your request need approval. Please wait!"
+            send_approval_message("User <@{0}> request to `{1}`".format(
+                data["user_name"], command_text), data)
+            att_text = constants.MESSAGE_APPROVAL_USER
         else:
-            att_text = cmd.call(command + "_turnoff", options[1])
-    elif options[0] == "status":
-        attach = cmd.call(command + "_status", options[1])
-    elif options[0] == "tags":
-        att_text = cmd.call(command + "_tags", options[1])
-    elif options[0] == "schedule" and options[1] == "set":
+            att_text = cmd.call(command + "_turnoff", value)
+    elif action == "status":
+        attach = cmd.call(command + "_status", value)
+    elif action == "tags":
+        att_text = cmd.call(command + "_tags", value)
+    elif action == "schedule" and value[0] == "set":
         schedule = process_schedule_set_option(options)
         if schedule == constants.MESSAGE_WRONG_COMMAND:
             att_text = "Command `{0} {1}` wrong".format(
@@ -152,9 +170,9 @@ def process_slash_command_request(data):
         else:
             schedule["requester"] = data["user_name"]
             att_text = cmd.call(command + "_set_schedule", schedule)
-    elif options[0] == "schedule" and options[1] == "delete":
-        att_text = cmd.call(command + "_delete_schedule", options[2])
-    elif options[0] == "schedule" and options[1] == "list-all":
+    elif action == "schedule" and value[0] == "delete":
+        att_text = cmd.call(command + "_delete_schedule", value[1])
+    elif action == "schedule" and value[0] == "list-all":
         att_text = cmd.call(command + "_list_schedule", None)
     else:
         att_text = "Command `{0} {1}` wrong".format(
@@ -242,7 +260,8 @@ def send_result_message_after_approval(data):
     }
     data = {
         "response_type": "in_channel",
-        "text": '<@{0}> {1} request: `{2}` of user <@{3}>'.format(data["approval_user_id"], data["approval_action"], data["text"], data["user_id"]),
+        "text": '<@{0}> {1} request: `{2}` of user <@{3}>'.format(
+            data["approval_user_id"], data["approval_action"], data["text"], data["user_id"]),
         "attachments": data["attachments"]
     }
     requests.post(uri, data=json.dumps(data), headers=headers)

@@ -37,43 +37,41 @@ def get_list_instances():
     return None
 
 
-def start_all_instances(instances):
+def start_all_instance(instances):
     """
     Start all instances
     """
     text = ""
     if instances:
         for instance in instances:
-            instance = json.loads(instance)
             if instance["State"] == "stopped":
                 RDS.start_db_instance(
                     DBInstanceIdentifier=str(instance["InstanceId"]))
                 text = "{0}The instance `{1}` starting!\n".format(
                     text, instance["TagName"])
             else:
-                text = "{0}The instance `{1}` already started!\n".format(
-                    text, instance["TagName"])
+                text = "{0}Can not `turn-on` instance `{1}` because of Instance in `{2}`!\n".format(
+                    text, instance["TagName"], instance["State"])
 
         return text
     return constants.MESSAGE_INSTANCE_NOT_FOUND
 
 
-def stop_all_instances(instances):
+def stop_all_instance(instances):
     """
     Stop all instances
     """
     text = ""
     if instances:
         for instance in instances:
-            instance = json.loads(instance)
             if instance["State"] == "available":
                 RDS.stop_db_instance(
                     DBInstanceIdentifier=str(instance["InstanceId"]))
                 text = "{0}The instance `{1}` stopping!\n".format(
                     text, str(instance["TagName"]))
             else:
-                text = "{0}The instance `{1}` already stopped!\n".format(
-                    text, str(instance["TagName"]))
+                text = "{0}Can not `turn-off` instance `{1}` because of Instance in `{2}`!\n".format(
+                    text, str(instance["TagName"]), str(instance["State"]))
 
         return text
     return constants.MESSAGE_INSTANCE_NOT_FOUND
@@ -90,8 +88,8 @@ def start_instance(instance):
         text = "{0}The instance `{1}` starting!\n".format(
             text, str(instance["TagName"]))
     else:
-        text = "{0}The instance `{1}` already started!\n".format(
-            text, str(instance["TagName"]))
+        text = "{0}Can not `turn-on` instance `{1}` because of Instance in `{2}`!\n".format(
+            text, str(instance["TagName"]), str(instance["State"]))
 
     return text
 
@@ -107,7 +105,7 @@ def stop_instance(instance):
         text = "{0}The instance `{1}` stopping!\n".format(
             text, str(instance["TagName"]))
     else:
-        text = "{0}The instance `{1}` already stopped!\n".format(
-            text, str(instance["TagName"]))
+        text = "{0}Can not `turn-off` instance `{1}` because of Instance in `{2}`!\n".format(
+            text, str(instance["TagName"]), str(instance["State"]))
 
     return text

@@ -21,8 +21,12 @@ def find_function(function_name):
 
 def add_invoke_function_permission(statement_id, function_name):
     # Make source_arn as statement id
-    LAMBDA.add_permission(StatementId=statement_id, FunctionName=function_name, Principal='events.amazonaws.com',
-                          Action='lambda:InvokeFunction')
+    LAMBDA.add_permission(
+        StatementId=statement_id,
+        FunctionName=function_name,
+        Principal='events.amazonaws.com',
+        Action='lambda:InvokeFunction'
+    )
 
 
 def remove_permission(statement_id, function_name):
