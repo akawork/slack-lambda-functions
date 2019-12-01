@@ -14,6 +14,7 @@ Build an Slack bot can use for manage Instances or Service on AWS
   - [Install App to Workspace](#install-app-to-workspace)
   - [Create Lambda Functions](#create-lambda-functions)
   - [Create API via API Gateway](#create-api-via-api-gateway)
+  - [Config aws Lambda Functions to use Confirmation feature](#config-aws-lambda-functions-to-use-confirmation-feature)
   - [Develop functions](#develop-functions)
     - [Requirement](#requirement)
 
@@ -135,6 +136,13 @@ Input the `App Name` and select the `Workspace` you will use the Slack App. Afte
 - You can also can see result in the `Design` block from Lambda like below
 
 ![lambda design](docs/images/desgin-in-lambda.png)
+
+## Config aws Lambda Functions to use Confirmation feature
+
+- Copy webhook value of Slack channel that you want to make it become Confirmation channel
+![get slack channel webhook](docs/images/get-chatroom-webhook.png)
+
+- Place this webhook value to `SLACK_APPROVAL_ROOM_WEEBHOOK` constant in `constants.py` file (Aws-Lambda Functions)
 
 ## Develop functions
 
