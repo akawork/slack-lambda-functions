@@ -70,7 +70,7 @@ def get_instance_id(_instances, instance_list, regex):
     else:
         for instance in _instances:
             for item in instance_list:
-                if instance == item["TagName"].lower():
+                if instance.lower() == item["TagName"].lower():
                     instances.append(item)
 
     return instances
@@ -162,6 +162,29 @@ def print_instance_tag(_instance):
     return attachment
 
 
+def create_schedule(aws_cmd, cmd_text, instance, cron_express, is_loop, requester):
+    schedule = {
+        "commands": [],
+        "requester": requester
+    }
+    cmd = {
+        "cmd": aws_cmd,
+        "cmd_text": cmd_text,
+        "instance_tag": instance,
+        "cron_express": cron_express,
+        "is_loop": is_loop
+    }
+    schedule["commands"].append(cmd)
+    return schedule
+
+def get_schedule_rule_name(rule_name_regex) :
+    list_schedule_rule = []
+    rules = cw_events.list_rules()["Rules"]
+    for rule in rules:
+        if rule_name_regex in rule["Name"] :
+            list_schedule_rule.append(rule["Name"])
+    return list_schedule_rule
+
 def print_schedule_list_info(list_rules):
     """
     Format attachment for schedule info
@@ -224,30 +247,56 @@ class Command(object):
         number_instance = len(instances)
         if number_instance == 0:
             return constants.MESSAGE_INSTANCE_NOT_FOUND
-        elif number_instance == 1:
-            _instance = instances[0]
-            if _instance["ServiceType"] == "ec2":
-                value = ec2.start_instance(_instance)
-            elif _instance["ServiceType"] == "rds":
-                value = rds.start_instance(_instance)
         else:
-            ec2_instances = []
-            rds_instances = []
+            input_ec2_instances = []
+            input_rds_instances = []
             for _instance in instances:
                 if _instance["ServiceType"] == "ec2":
-                    ec2_instances.append(_instance)
+                    input_ec2_instances.append(_instance)
                 elif _instance["ServiceType"] == "rds":
-                    rds_instances.append(_instance)
+                    input_rds_instances.append(_instance)
 
             value = ""
-            if len(ec2_instances) > 0:
-                result = ec2.start_all_instance(ec2_instances)
-                value = "{0}{1}\n".format(value, result)
-            if len(rds_instances) > 0:
-                result = rds.start_all_instance(rds_instances)
+            if len(input_rds_instances) > 0:
+                result = rds.start_all_instance(input_rds_instances)
                 value = "{0}{1}\n".format(value, result)
 
-        return value
+            if len(input_ec2_instances) > 0:
+                # Need to check and turnon rds before ec2
+                for ec2_instance in input_ec2_instances:
+                    rds_instance_can_be = ["{0}db".format(
+                        ec2_instance["TagName"].lower()), "{0}-db".format(ec2_instance["TagName"].lower())]
+                    check_rds_can_be = get_instance_id(rds_instance_can_be, rds_instances, False)
+                    if len(check_rds_can_be) == 0 or (check_rds_can_be[0]["State"] == "available"):
+                        # Check turnon schedule. If exist, remove it
+                        rule_name_prefix = "auto_schedule_turnon_{0}".format(ec2_instance["TagName"])
+                        list_rule = get_schedule_rule_name(rule_name_prefix)
+                        for rule_name in list_rule:
+                            cw_events.delete_rule(rule_name)
+                        # Can turn on ec2
+                        result = ec2.start_instance(ec2_instance)
+                        value = "{0}{1}\n".format(value, result)
+                    elif check_rds_can_be[0]["State"] == "stopped":
+                        # Need to turn-on rds first
+                        rds.start_instance(check_rds_can_be[0])
+                        schedule = create_schedule(
+                            "aws", "turnon", ec2_instance["TagName"], "cron(0/2 * * * ? *)", True, "auto_schedule")
+                        Command.aws_set_schedule(schedule)
+                        result = "The RDS instance `{0}` is starting\n".format(check_rds_can_be[0]["TagName"])
+                        result = "{0}`Turnon {1}` need to wait until RDS instance `{2}` is started. Please wait!".format(
+                            result, ec2_instance["TagName"], check_rds_can_be[0]["TagName"])
+                        value = "{0}{1}\n".format(value, result)
+                    elif check_rds_can_be[0]["State"] == "starting" or ("configuring" in check_rds_can_be[0]["State"]):
+                        # Waiting until rds is turned-on
+                        result = "`Turnon {0}` need to wait until RDS instance `{1}` is started. Please wait!".format(
+                            ec2_instance["TagName"], check_rds_can_be[0]["TagName"])
+                        value = "{0}{1}\n".format(value, result)
+                    else:
+                        result = "Cannot `turn-on` instance EC2 `{0}` because of RDS instance `{1}` is `{2}`".format(
+                            ec2_instance["TagName"], check_rds_can_be[0]["TagName"], check_rds_can_be[0]["State"])
+                        value = "{0}{1}\n".format(value, result)
+
+            return value
 
     @classmethod
     def aws_turnoff(cls, _instances):
@@ -261,27 +310,29 @@ class Command(object):
         number_instance = len(instances)
         if number_instance == 0:
             return constants.MESSAGE_INSTANCE_NOT_FOUND
-        if number_instance == 1:
-            _instance = instances[0]
-            if _instance["ServiceType"] == "ec2":
-                value = ec2.stop_instance(_instance)
-            elif _instance["ServiceType"] == "rds":
-                value = rds.stop_instance(_instance)
         else:
-            ec2_instances = []
-            rds_instances = []
+            input_ec2_instances = []
+            input_rds_instances = []
             for _instance in instances:
                 if _instance["ServiceType"] == "ec2":
-                    ec2_instances.append(_instance)
+                    input_ec2_instances.append(_instance)
                 elif _instance["ServiceType"] == "rds":
-                    rds_instances.append(_instance)
+                    input_rds_instances.append(_instance)
 
             value = ""
-            if len(ec2_instances) > 0:
-                result = ec2.stop_all_instance(ec2_instances)
-                value = "{0}{1}\n".format(value, result)
-            if len(rds_instances) > 0:
-                result = rds.stop_all_instance(rds_instances)
+            if len(input_ec2_instances) > 0:
+                for ec2_instance in input_ec2_instances:
+                    result = ec2.stop_instance(ec2_instance)
+                    value = "{0}{1}\n".format(value, result)
+                    rds_instance_can_be = ["{0}db".format(
+                        ec2_instance["TagName"].lower()), "{0}-db".format(ec2_instance["TagName"].lower())]
+                    check_rds_can_be = get_instance_id(rds_instance_can_be, rds_instances, False)
+                    if len(check_rds_can_be) > 0:
+                        result = rds.stop_instance(check_rds_can_be[0])
+                        value = "{0}{1}\n".format(value, result)
+
+            if len(input_rds_instances) > 0:
+                result = rds.stop_all_instance(input_rds_instances)
                 value = "{0}{1}\n".format(value, result)
 
         return value
@@ -345,24 +396,21 @@ class Command(object):
         response_text = "Set schedule successfully:\n"
         for command in schedule["commands"]:
             if command["cmd_text"] == "turnon" or command["cmd_text"] == "turnoff":
-                cron_express = convert_datetime_to_cron(command["time"])
-                # Check if input date_time is match format
-                if cron_express is None:
-                    return constants.MESSAGE_DATE_TIME_INCORRECT
                 # Check if input instance exist
-                message = Command.aws_status(command["instance_tag"])["text"]
-                if message == constants.MESSAGE_INSTANCE_NOT_FOUND:
+                list_instance = ec2.get_list_instances() + rds.get_list_instances()
+                instances = get_instance_id([command["instance_tag"]], list_instance, False)
+                if len(instances) == 0:
                     return constants.MESSAGE_INSTANCE_NOT_FOUND
                 rule_name = '{0}_{1}_{2}_{3}'.format(
                     schedule["requester"], command["cmd_text"], command["instance_tag"], timestamp)
-                rule_description = '{0} `{1}` at {2}'.format(
-                    command["cmd_text"], command["instance_tag"], command["time"]).capitalize()
+                rule_description = '{0} `{1}` with cron expression {2}'.format(
+                    command["cmd_text"], command["instance_tag"], command["cron_express"]).capitalize()
                 # Create rule
                 cmd_text = '{0}+{1}'.format(command["cmd_text"], command["instance_tag"])
                 target_input = '{"body":"' + constants.AUTO_TRIGGER_EVENT_BODY.format(
-                    schedule["requester"], rule_name, False, command["cmd"], cmd_text) + '"}'
+                    schedule["requester"], rule_name, command["is_loop"], command["cmd"], cmd_text) + '"}'
                 cw_events.create_rule(rule_name, rule_description,
-                                      cron_express, constants.LAMBDA_FUNCTION_NAME, target_input)
+                                      command["cron_express"], constants.LAMBDA_FUNCTION_NAME, target_input)
                 response_text = '{0}*- Rule `{1}`:*\n      {2}\n'.format(
                     response_text, rule_name, rule_description)
 

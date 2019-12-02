@@ -85,7 +85,7 @@ def start_instance(instance):
     if instance["State"] == "stopped":
         RDS.start_db_instance(
             DBInstanceIdentifier=str(instance["InstanceId"]))
-        text = "{0}The instance `{1}` starting!\n".format(
+        text = "{0}The RDS instance `{1}` is starting!\n".format(
             text, str(instance["TagName"]))
     else:
         text = "{0}Can not `turn-on` instance `{1}` because of Instance in `{2}`!\n".format(
@@ -102,7 +102,7 @@ def stop_instance(instance):
     if instance["State"] == "available":
         RDS.stop_db_instance(
             DBInstanceIdentifier=str(instance["InstanceId"]))
-        text = "{0}The instance `{1}` stopping!\n".format(
+        text = "{0}The RDS instance `{1}` is stopping!\n".format(
             text, str(instance["TagName"]))
     else:
         text = "{0}Can not `turn-off` instance `{1}` because of Instance in `{2}`!\n".format(

@@ -27,24 +27,28 @@ def process_schedule_set_option(options):
     """
     options_size = len(options)
     # Support only schedule for turnon/turnoff
-    if 3 < options_size < 8:
+    if 3 < options_size < 7:
         schedule = {
             "commands": [],
             "requester": None
         }
-        i = 2
+        i = 1
         while i < options_size - 1:
             if options[i] == "turnon" or options[i] == "turnoff":
+                date_time = urllib.parse.unquote(options[i+1]).replace("-", " ")
+                if date_time is None:
+                    return constants.MESSAGE_WRONG_COMMAND
+                cron_express = slackstash.convert_datetime_to_cron(date_time)
+                # Check if input date_time is match format
+                if cron_express is None:
+                    return constants.MESSAGE_DATE_TIME_INCORRECT
                 cmd = {
                     "cmd": "aws",
                     "cmd_text": options[i],
                     "instance_tag": options[options_size - 1],
-                    "time": urllib.parse.unquote(options[i+1]).replace("-", " "),
+                    "cron_express": cron_express,
                     "is_loop": False
                 }
-                date_time = cmd["time"]
-                if date_time is None:
-                    return constants.MESSAGE_WRONG_COMMAND
                 schedule["commands"].append(cmd)
                 i = i + 2
             else:
@@ -164,7 +168,7 @@ def process_slash_command_request(data):
         response["attachments"] = cmd.call(command + "_tags", value)
         return response
     elif action == "schedule" and value[0] == "set":
-        schedule = process_schedule_set_option(options)
+        schedule = process_schedule_set_option(value)
         if schedule == constants.MESSAGE_WRONG_COMMAND:
             att_text = "Command `{0} {1}` wrong".format(
                 command, data["text"].replace("+", " "))

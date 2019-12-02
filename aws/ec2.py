@@ -102,8 +102,8 @@ def start_instance(instance):
     if instance["State"] == "stopped":
         instance_ids.append(instance["InstanceId"])
         CLIENT.start_instances(InstanceIds=instance_ids)
-        text = text + 'The instance `' + str(
-            instance["TagName"]) + '` starting!\n'
+        text = text + 'The EC2 instance `' + str(
+            instance["TagName"]) + '` is starting!\n'
     else:
         text = "{0}Can not `turn-on` instance `{1}` because of Instance in `{2}`!\n".format(
             text, str(instance["TagName"]), str(instance["State"]))
@@ -120,8 +120,8 @@ def stop_instance(instance):
     if instance["State"] == "running":
         instance_ids.append(instance["InstanceId"])
         CLIENT.stop_instances(InstanceIds=instance_ids)
-        text = text + 'The instance `' + str(
-            instance["TagName"]) + '` stopping!\n'
+        text = text + 'The EC2 instance `' + str(
+            instance["TagName"]) + '` is stopping!\n'
     else:
         text = "{0}Can not `turn-off` instance `{1}` because of Instance in `{2}`!\n".format(
             text, str(instance["TagName"]), str(instance["State"]))
